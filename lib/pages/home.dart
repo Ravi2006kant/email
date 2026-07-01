@@ -1,7 +1,7 @@
-import 'dart:math';
-
 import 'package:email/components/fields.dart';
 import 'package:email/components/textfield.dart';
+import 'package:email/services/google_auth_service.dart';
+import 'package:email/services/gmail_service.dart';
 import 'package:flutter/material.dart';
 
 class Home extends StatefulWidget {
@@ -12,16 +12,46 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
+  final GoogleAuthService auth = GoogleAuthService();
+
   final TextEditingController senderCont = TextEditingController();
   final TextEditingController receiverCont = TextEditingController();
   final TextEditingController subjectCont = TextEditingController();
   final TextEditingController bodyCont = TextEditingController();
 
-  void store() {
-    String sender = senderCont.text.trim();
-    String receiver = receiverCont.text.trim();
-    String subject = subjectCont.text.trim();
-    String body = bodyCont.text.trim();
+  @override
+  void dispose() {
+    senderCont.dispose();
+    receiverCont.dispose();
+    subjectCont.dispose();
+    bodyCont.dispose();
+    super.dispose();
+  }
+
+  Future<void> sendEmail() async {
+    final user = await auth.signIn();
+
+    if (user == null) {
+      print("Login cancelled");
+      return;
+    }
+
+    final client = await auth.getClient();
+
+    if (client == null) {
+      print("Client error");
+      return;
+    }
+
+    final gmailService = GmailService(client);
+
+    await gmailService.sendEmail(
+      receiver: receiverCont.text.trim(),
+      subject: subjectCont.text.trim(),
+      body: bodyCont.text.trim(),
+    );
+
+    print("Email sent successfully");
   }
 
   ButtonStyle style = ElevatedButton.styleFrom(
@@ -32,9 +62,9 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          "Sign Up",
-          style: TextStyle(color: Colors.white, fontWeight: .bold),
+        title: const Text(
+          "Email App",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         backgroundColor: Colors.purpleAccent,
@@ -44,15 +74,12 @@ class _HomeState extends State<Home> {
           child: Column(
             children: [
               Card(
-                margin: EdgeInsets.all(15),
-
+                margin: const EdgeInsets.all(15),
                 child: Column(
-                  crossAxisAlignment: .start,
-
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SizedBox(height: 5),
+                    const SizedBox(height: 5),
 
-                    //senders email
                     Fields(txt: "Sender's Email"),
                     Textfield(
                       cont: senderCont,
@@ -60,7 +87,6 @@ class _HomeState extends State<Home> {
                       field: "Enter Your Email",
                     ),
 
-                    //receiver email
                     Fields(txt: "Receiver's Email"),
                     Textfield(
                       cont: receiverCont,
@@ -68,15 +94,13 @@ class _HomeState extends State<Home> {
                       field: "Enter Receiver's Email",
                     ),
 
-                    //subject
                     Fields(txt: "Subject"),
                     Textfield(
                       cont: subjectCont,
                       keyboardType: TextInputType.text,
-                      field: "Enter Subject ",
+                      field: "Enter Subject",
                     ),
 
-                    //body
                     Fields(txt: "Body"),
                     Textfield(
                       length: 4,
@@ -84,36 +108,33 @@ class _HomeState extends State<Home> {
                       keyboardType: TextInputType.text,
                       field: "Enter body",
                     ),
-                    SizedBox(height: 5),
+
+                    const SizedBox(height: 5),
+
                     Center(
                       child: ElevatedButton.icon(
                         style: style,
-                        iconAlignment: .end,
-                        icon: Icon(Icons.send, color: Colors.white),
-                        onPressed: () {
-                          store();
-                        },
-                        label: Text(
+                        icon: const Icon(Icons.send, color: Colors.white),
+                        onPressed: sendEmail,
+                        label: const Text(
                           "Send",
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: .bold,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ),
 
-                    SizedBox(height: 10),
+                    const SizedBox(height: 10),
                   ],
                 ),
               ),
-              CircleAvatar(
+
+              const CircleAvatar(
                 radius: 30,
                 backgroundColor: Colors.purpleAccent,
-                child: IconButton(
-                  onPressed: () {},
-                  icon: Icon(Icons.mic, color: Colors.white),
-                ),
+                child: Icon(Icons.mic, color: Colors.white),
               ),
             ],
           ),
