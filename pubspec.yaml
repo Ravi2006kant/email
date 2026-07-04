@@ -40,6 +40,7 @@ dependencies:
   http: ^1.6.0
   extension_google_sign_in_as_googleapis_auth: ^2.0.13
   speech_to_text: ^7.4.0
+  postgres: ^3.5.12
 
 dev_dependencies:
   flutter_test:

@@ -1,9 +1,11 @@
 import 'package:email/components/fields.dart';
 import 'package:email/components/textfield.dart';
+import 'package:email/services/database_service.dart';
 import 'package:email/services/google_auth_service.dart';
 import 'package:email/services/gmail_service.dart';
+
 import 'package:flutter/material.dart';
-import 'package:googleapis/servicemanagement/v1.dart';
+
 import 'package:speech_to_text/speech_to_text.dart';
 
 class Home extends StatefulWidget {
@@ -15,18 +17,31 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   final GoogleAuthService auth = GoogleAuthService();
+  final DatabaseService db = DatabaseService();
+
   final TextEditingController senderCont = TextEditingController();
   final TextEditingController receiverCont = TextEditingController();
   final TextEditingController subjectCont = TextEditingController();
   final TextEditingController bodyCont = TextEditingController();
+
   final SpeechToText stx = SpeechToText();
+
   String inputedText = "Voice Show Here..";
 
   @override
   void initState() {
     super.initState();
+
     speechinit();
+    db.connect();
   }
+
+  // Future<void> timeEmail() async {
+  //   DateTime sentTime = DateTime.now();
+  //   String time = sentTime.toString();
+
+  //   print(time);
+  // }
 
   Future<void> speechinit() async {
     bool available = await stx.initialize(
@@ -125,6 +140,13 @@ class _HomeState extends State<Home> {
     final gmailService = GmailService(client);
 
     await gmailService.sendEmail(
+      receiver: receiverCont.text.trim(),
+      subject: subjectCont.text.trim(),
+      body: bodyCont.text.trim(),
+    );
+
+    await db.insertEmail(
+      sender: senderCont.text.trim(),
       receiver: receiverCont.text.trim(),
       subject: subjectCont.text.trim(),
       body: bodyCont.text.trim(),
