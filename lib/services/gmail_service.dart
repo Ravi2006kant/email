@@ -15,7 +15,8 @@ class GmailService {
     final gmail = GmailApi(client);
 
     // Step 1: Create raw email string (RFC 2822 format)
-    final emailString = '''
+    final emailString =
+        '''
 To: $receiver
 Subject: $subject
 Content-Type: text/plain; charset="UTF-8"
@@ -24,8 +25,9 @@ $body
 ''';
 
     // Step 2: Encode email in base64URL format
-    final encodedEmail =
-        base64Url.encode(utf8.encode(emailString)).replaceAll('=', '');
+    final encodedEmail = base64Url
+        .encode(utf8.encode(emailString))
+        .replaceAll('=', '');
 
     // Step 3: Create Gmail message
     final message = Message()..raw = encodedEmail;

@@ -3,6 +3,8 @@ import 'package:email/components/textfield.dart';
 import 'package:email/services/google_auth_service.dart';
 import 'package:email/services/gmail_service.dart';
 import 'package:flutter/material.dart';
+import 'package:googleapis/servicemanagement/v1.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -13,11 +15,82 @@ class Home extends StatefulWidget {
 
 class _HomeState extends State<Home> {
   final GoogleAuthService auth = GoogleAuthService();
-
   final TextEditingController senderCont = TextEditingController();
   final TextEditingController receiverCont = TextEditingController();
   final TextEditingController subjectCont = TextEditingController();
   final TextEditingController bodyCont = TextEditingController();
+  final SpeechToText stx = SpeechToText();
+  String inputedText = "Voice Show Here..";
+
+  @override
+  void initState() {
+    super.initState();
+    speechinit();
+  }
+
+  Future<void> speechinit() async {
+    bool available = await stx.initialize(
+      onStatus: (status) {
+        print("STATUS: $status");
+      },
+      onError: (error) {
+        print("ERROR: $error");
+      },
+    );
+
+    print("Speech available: $available");
+  }
+
+  Future<void> speechlisten() async {
+    await stx.listen(
+      onResult: (result) {
+        setState(() {
+          inputedText = result.recognizedWords;
+        });
+
+        processCommand(result.recognizedWords);
+
+        if (result.finalResult) {
+          stx.stop();
+        }
+      },
+    );
+  }
+
+  void processCommand(String command) {
+    String text = command.toLowerCase();
+
+    int senderIndex = text.indexOf("sender");
+    int receiverIndex = text.indexOf("receiver");
+    int subjectIndex = text.indexOf("subject");
+    int bodyIndex = text.indexOf("body");
+
+    // Sender
+    if (senderIndex != -1 && receiverIndex != -1) {
+      senderCont.text = command
+          .substring(senderIndex + "sender".length, receiverIndex)
+          .trim();
+    }
+
+    // Receiver
+    if (receiverIndex != -1 && subjectIndex != -1) {
+      receiverCont.text = command
+          .substring(receiverIndex + "receiver".length, subjectIndex)
+          .trim();
+    }
+
+    // Subject
+    if (subjectIndex != -1 && bodyIndex != -1) {
+      subjectCont.text = command
+          .substring(subjectIndex + "subject".length, bodyIndex)
+          .trim();
+    }
+
+    // Body
+    if (bodyIndex != -1) {
+      bodyCont.text = command.substring(bodyIndex + "body".length).trim();
+    }
+  }
 
   @override
   void dispose() {
@@ -28,18 +101,24 @@ class _HomeState extends State<Home> {
     super.dispose();
   }
 
+  void msg(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
+  }
+
   Future<void> sendEmail() async {
     final user = await auth.signIn();
 
     if (user == null) {
-      print("Login cancelled");
+      msg("user not found");
       return;
     }
 
     final client = await auth.getClient();
 
     if (client == null) {
-      print("Client error");
+      msg("user not found");
       return;
     }
 
@@ -51,7 +130,7 @@ class _HomeState extends State<Home> {
       body: bodyCont.text.trim(),
     );
 
-    print("Email sent successfully");
+    msg("message send successfully");
   }
 
   ButtonStyle style = ElevatedButton.styleFrom(
@@ -63,12 +142,13 @@ class _HomeState extends State<Home> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          "Email App",
+          "Sendo",
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
         backgroundColor: Colors.purpleAccent,
       ),
+
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -131,10 +211,14 @@ class _HomeState extends State<Home> {
                 ),
               ),
 
-              const CircleAvatar(
+              CircleAvatar(
                 radius: 30,
                 backgroundColor: Colors.purpleAccent,
-                child: Icon(Icons.mic, color: Colors.white),
+                child: IconButton(
+                  icon: Icon(Icons.mic),
+                  onPressed: () => speechlisten(),
+                  color: Colors.white,
+                ),
               ),
             ],
           ),
@@ -143,3 +227,6 @@ class _HomeState extends State<Home> {
     );
   }
 }
+
+
+//controls the mic just like tectfield that spechtotext
