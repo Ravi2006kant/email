@@ -31,17 +31,9 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
-
     speechinit();
     db.connect();
   }
-
-  // Future<void> timeEmail() async {
-  //   DateTime sentTime = DateTime.now();
-  //   String time = sentTime.toString();
-
-  //   print(time);
-  // }
 
   Future<void> speechinit() async {
     bool available = await stx.initialize(
@@ -72,6 +64,15 @@ class _HomeState extends State<Home> {
     );
   }
 
+  // Cleans spoken emails by removing spaces and replacing "at" / "dot"
+  String cleanEmail(String email) {
+    return email
+        .toLowerCase()
+        .replaceAll(" at ", "@")
+        .replaceAll(" dot ", ".")
+        .replaceAll(" ", "");
+  }
+
   void processCommand(String command) {
     String text = command.toLowerCase();
 
@@ -82,16 +83,20 @@ class _HomeState extends State<Home> {
 
     // Sender
     if (senderIndex != -1 && receiverIndex != -1) {
-      senderCont.text = command
+      String sender = command
           .substring(senderIndex + "sender".length, receiverIndex)
           .trim();
+
+      senderCont.text = cleanEmail(sender);
     }
 
     // Receiver
     if (receiverIndex != -1 && subjectIndex != -1) {
-      receiverCont.text = command
+      String receiver = command
           .substring(receiverIndex + "receiver".length, subjectIndex)
           .trim();
+
+      receiverCont.text = cleanEmail(receiver);
     }
 
     // Subject
@@ -129,6 +134,11 @@ class _HomeState extends State<Home> {
       msg("user not found");
       return;
     }
+
+    // Instantly refresh the UI to show the authenticated Google account
+    setState(() {
+      senderCont.text = user.email;
+    });
 
     final client = await auth.getClient();
 
@@ -186,7 +196,8 @@ class _HomeState extends State<Home> {
                     Textfield(
                       cont: senderCont,
                       keyboardType: TextInputType.emailAddress,
-                      field: "Enter Your Email",
+                      field: "Google account will appear here",
+                      readOnly: true, // Requires readOnly support in textfield.dart
                     ),
 
                     Fields(txt: "Receiver's Email"),
@@ -237,7 +248,7 @@ class _HomeState extends State<Home> {
                 radius: 30,
                 backgroundColor: Colors.purpleAccent,
                 child: IconButton(
-                  icon: Icon(Icons.mic),
+                  icon: const Icon(Icons.mic),
                   onPressed: () => speechlisten(),
                   color: Colors.white,
                 ),
@@ -249,6 +260,3 @@ class _HomeState extends State<Home> {
     );
   }
 }
-
-
-//controls the mic just like tectfield that spechtotext
