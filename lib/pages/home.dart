@@ -3,9 +3,7 @@ import 'package:email/components/textfield.dart';
 import 'package:email/services/database_service.dart';
 import 'package:email/services/google_auth_service.dart';
 import 'package:email/services/gmail_service.dart';
-
 import 'package:flutter/material.dart';
-
 import 'package:speech_to_text/speech_to_text.dart';
 
 class Home extends StatefulWidget {
@@ -26,45 +24,73 @@ class _HomeState extends State<Home> {
 
   final SpeechToText stx = SpeechToText();
 
-  String inputedText = "Voice Show Here..";
+  String inputedText = "Press mic and speak...";
+  dynamic _authenticatedClient;
+  bool _isSignedIn = false;
+  bool _isSending = false;
+  bool _isListening = false;
 
   @override
   void initState() {
     super.initState();
-    speechinit();
     db.connect();
+    speechinit();
+    // Sign in automatically when app opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _signInOnStart();
+    });
+  }
+
+  Future<void> _signInOnStart() async {
+    try {
+      final user = await auth.signIn();
+      if (user == null) {
+        msg("Sign in failed. Try again.");
+        return;
+      }
+      final client = await auth.getClient();
+      setState(() {
+        senderCont.text = user.email;
+        _authenticatedClient = client;
+        _isSignedIn = true;
+      });
+    } catch (e) {
+      msg("Sign in error: $e");
+    }
   }
 
   Future<void> speechinit() async {
-    bool available = await stx.initialize(
-      onStatus: (status) {
-        print("STATUS: $status");
-      },
-      onError: (error) {
-        print("ERROR: $error");
-      },
+    await stx.initialize(
+      onStatus: (status) => print("STATUS: $status"),
+      onError: (error) => print("ERROR: $error"),
     );
-
-    print("Speech available: $available");
   }
 
   Future<void> speechlisten() async {
+    // If already listening, stop
+    if (_isListening) {
+      await stx.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+
+    setState(() {
+      _isListening = true;
+      inputedText = "Listening...";
+    });
+
     await stx.listen(
       onResult: (result) {
-        setState(() {
-          inputedText = result.recognizedWords;
-        });
-
+        setState(() => inputedText = result.recognizedWords);
         processCommand(result.recognizedWords);
-
         if (result.finalResult) {
           stx.stop();
+          setState(() => _isListening = false);
         }
       },
     );
   }
 
-  // Cleans spoken emails by removing spaces and replacing "at" / "dot"
   String cleanEmail(String email) {
     return email
         .toLowerCase()
@@ -74,41 +100,35 @@ class _HomeState extends State<Home> {
   }
 
   void processCommand(String command) {
-    String text = command.toLowerCase();
+    final text = command.toLowerCase();
 
-    int senderIndex = text.indexOf("sender");
-    int receiverIndex = text.indexOf("receiver");
-    int subjectIndex = text.indexOf("subject");
-    int bodyIndex = text.indexOf("body");
-
-    // Sender
-    if (senderIndex != -1 && receiverIndex != -1) {
-      String sender = command
-          .substring(senderIndex + "sender".length, receiverIndex)
-          .trim();
-
-      senderCont.text = cleanEmail(sender);
-    }
+    final receiverIndex = text.indexOf("receiver");
+    final subjectIndex = text.indexOf("subject");
+    final bodyIndex = text.indexOf("body");
 
     // Receiver
-    if (receiverIndex != -1 && subjectIndex != -1) {
-      String receiver = command
-          .substring(receiverIndex + "receiver".length, subjectIndex)
-          .trim();
-
+    if (receiverIndex != -1) {
+      final end = subjectIndex != -1
+          ? subjectIndex
+          : bodyIndex != -1
+              ? bodyIndex
+              : text.length;
+      final receiver =
+          command.substring(receiverIndex + "receiver".length, end).trim();
       receiverCont.text = cleanEmail(receiver);
     }
 
     // Subject
-    if (subjectIndex != -1 && bodyIndex != -1) {
-      subjectCont.text = command
-          .substring(subjectIndex + "subject".length, bodyIndex)
-          .trim();
+    if (subjectIndex != -1) {
+      final end = bodyIndex != -1 ? bodyIndex : text.length;
+      subjectCont.text =
+          command.substring(subjectIndex + "subject".length, end).trim();
     }
 
     // Body
     if (bodyIndex != -1) {
-      bodyCont.text = command.substring(bodyIndex + "body".length).trim();
+      bodyCont.text =
+          command.substring(bodyIndex + "body".length).trim();
     }
   }
 
@@ -128,46 +148,49 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> sendEmail() async {
-    final user = await auth.signIn();
-
-    if (user == null) {
-      msg("user not found");
+    // If somehow not signed in yet, retry sign in
+    if (!_isSignedIn || _authenticatedClient == null) {
+      msg("Not signed in yet. Trying again...");
+      await _signInOnStart();
       return;
     }
 
-    // Instantly refresh the UI to show the authenticated Google account
-    setState(() {
-      senderCont.text = user.email;
-    });
-
-    final client = await auth.getClient();
-
-    if (client == null) {
-      msg("user not found");
+    if (receiverCont.text.trim().isEmpty) {
+      msg("Receiver email is empty.");
       return;
     }
 
-    final gmailService = GmailService(client);
+    setState(() => _isSending = true);
 
-    await gmailService.sendEmail(
-      receiver: receiverCont.text.trim(),
-      subject: subjectCont.text.trim(),
-      body: bodyCont.text.trim(),
-    );
+    try {
+      final gmailService = GmailService(_authenticatedClient);
 
-    await db.insertEmail(
-      sender: senderCont.text.trim(),
-      receiver: receiverCont.text.trim(),
-      subject: subjectCont.text.trim(),
-      body: bodyCont.text.trim(),
-    );
+      await gmailService.sendEmail(
+        receiver: receiverCont.text.trim(),
+        subject: subjectCont.text.trim(),
+        body: bodyCont.text.trim(),
+      );
 
-    msg("message send successfully");
+      await db.insertEmail(
+        sender: senderCont.text.trim(),
+        receiver: receiverCont.text.trim(),
+        subject: subjectCont.text.trim(),
+        body: bodyCont.text.trim(),
+      );
+
+      msg("Email sent successfully!");
+
+      // Clear fields after send (sender stays)
+      receiverCont.clear();
+      subjectCont.clear();
+      bodyCont.clear();
+      setState(() => inputedText = "Press mic and speak...");
+    } catch (e) {
+      msg("Failed to send: $e");
+    } finally {
+      setState(() => _isSending = false);
+    }
   }
-
-  ButtonStyle style = ElevatedButton.styleFrom(
-    backgroundColor: Colors.purpleAccent,
-  );
 
   @override
   Widget build(BuildContext context) {
@@ -180,7 +203,6 @@ class _HomeState extends State<Home> {
         centerTitle: true,
         backgroundColor: Colors.purpleAccent,
       ),
-
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
@@ -196,8 +218,7 @@ class _HomeState extends State<Home> {
                     Textfield(
                       cont: senderCont,
                       keyboardType: TextInputType.emailAddress,
-                      field: "Google account will appear here",
-                      // Requires readOnly support in textfield.dart
+                      field: _isSignedIn ? "" : "Signing in...",
                     ),
 
                     Fields(txt: "Receiver's Email"),
@@ -219,24 +240,30 @@ class _HomeState extends State<Home> {
                       length: 4,
                       cont: bodyCont,
                       keyboardType: TextInputType.text,
-                      field: "Enter body",
+                      field: "Enter Body",
                     ),
 
                     const SizedBox(height: 5),
 
                     Center(
-                      child: ElevatedButton.icon(
-                        style: style,
-                        icon: const Icon(Icons.send, color: Colors.white),
-                        onPressed: sendEmail,
-                        label: const Text(
-                          "Send",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      child: _isSending
+                          ? const CircularProgressIndicator(
+                              color: Colors.purpleAccent,
+                            )
+                          : ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.purpleAccent,
+                              ),
+                              icon: const Icon(Icons.send, color: Colors.white),
+                              onPressed: sendEmail,
+                              label: const Text(
+                                "Send",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                     ),
 
                     const SizedBox(height: 10),
@@ -244,15 +271,33 @@ class _HomeState extends State<Home> {
                 ),
               ),
 
-              CircleAvatar(
-                radius: 30,
-                backgroundColor: Colors.purpleAccent,
-                child: IconButton(
-                  icon: const Icon(Icons.mic),
-                  onPressed: () => speechlisten(),
-                  color: Colors.white,
+              // What mic heard
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  inputedText,
+                  style: const TextStyle(color: Colors.grey, fontSize: 13),
+                  textAlign: TextAlign.center,
                 ),
               ),
+
+              const SizedBox(height: 12),
+
+              // Mic button — red when listening, purple when idle
+              CircleAvatar(
+                radius: 30,
+                backgroundColor:
+                    _isListening ? Colors.red : Colors.purpleAccent,
+                child: IconButton(
+                  icon: Icon(
+                    _isListening ? Icons.mic_off : Icons.mic,
+                    color: Colors.white,
+                  ),
+                  onPressed: speechlisten,
+                ),
+              ),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),
