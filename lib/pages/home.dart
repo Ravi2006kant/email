@@ -197,7 +197,7 @@ class _HomeState extends State<Home> {
                       cont: senderCont,
                       keyboardType: TextInputType.emailAddress,
                       field: "Google account will appear here",
-                      readOnly: true, // Requires readOnly support in textfield.dart
+                      // Requires readOnly support in textfield.dart
                     ),
 
                     Fields(txt: "Receiver's Email"),
