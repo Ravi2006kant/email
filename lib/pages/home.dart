@@ -80,13 +80,31 @@ class _HomeState extends State<Home> {
     });
 
     await stx.listen(
-      onResult: (result) {
-        setState(() => inputedText = result.recognizedWords);
-        processCommand(result.recognizedWords);
-        if (result.finalResult) {
-          stx.stop();
-          setState(() => _isListening = false);
+      listenFor: const Duration(minutes: 5),
+      pauseFor: const Duration(seconds: 15),
+      partialResults: true,
+      onResult: (result) async {
+        setState(() {
+          inputedText = result.recognizedWords;
+        });
+
+        // Auto send command
+        if (result.recognizedWords.toLowerCase().contains("send email")) {
+          bodyCont.text = bodyCont.text
+              .replaceAll(RegExp("send email", caseSensitive: false), "")
+              .trim();
+
+          await stx.stop();
+
+          setState(() {
+            _isListening = false;
+          });
+
+          await sendEmail();
+          return;
         }
+
+        await processCommand(result.recognizedWords);
       },
     );
   }
@@ -99,7 +117,7 @@ class _HomeState extends State<Home> {
         .replaceAll(" ", "");
   }
 
-  void processCommand(String command) {
+  Future<void> processCommand(String command) async {
     final text = command.toLowerCase();
 
     final receiverIndex = text.indexOf("receiver");
@@ -127,8 +145,14 @@ class _HomeState extends State<Home> {
 
     // Body
     if (bodyIndex != -1) {
-      bodyCont.text =
-          command.substring(bodyIndex + "body".length).trim();
+      String body = command.substring(bodyIndex + "body".length).trim();
+
+      body = body.replaceAll(
+        RegExp("send email", caseSensitive: false),
+        "",
+      );
+
+      bodyCont.text = body;
     }
   }
 
